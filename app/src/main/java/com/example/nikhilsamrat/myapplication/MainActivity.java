@@ -65,6 +65,7 @@ public class MainActivity extends AppCompatActivity {
     public int frames=0;
     public int x = 3;
     public boolean b = false;
+    public MediaFormat mediaFormat;
     public int videoindex;
 
     @Override
@@ -121,6 +122,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
                 write(codec.getOutputBuffer(index),info);
+               // mediaMuxer.writeSampleData(videoindex,codec.getOutputBuffer(index),info);
                 codec.releaseOutputBuffer(index,false);
             }
 
@@ -131,8 +133,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onOutputFormatChanged(@NonNull MediaCodec codec, @NonNull MediaFormat format) {
-                videoindex = mediaMuxer.addTrack(format);
-                mediaMuxer.setOrientationHint(90);
+               mediaFormat = format;
             }
         });
 
@@ -143,13 +144,7 @@ public class MainActivity extends AppCompatActivity {
         }
         codecsurface = mediaCodec.createInputSurface();
 
-        try{
-            mediaMuxer = new MediaMuxer("/storage/emulated/0/Download/"+ String.valueOf(x) +".mp4",
-                    MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-            mediaCodec.start();
-        }catch (IOException e){
-            e.printStackTrace();
-        }
+        mediaCodec.start();
     }
 
     private void write(ByteBuffer b, MediaCodec.BufferInfo info) {
@@ -167,7 +162,7 @@ public class MainActivity extends AppCompatActivity {
                 frames++;
             }
         }else{
-          //  buffers.remove();
+           // buffers.remove();
            // bufferInfos.remove();
             buffers.add(b);
             bufferInfos.add(info);
@@ -197,12 +192,11 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    int z=0;
+    int z=0,k=0;
     private void click(){
         if(z==0) {
             try{
-                //mediaCodec.stop();
-                mediaMuxer.start();
+               // mediaCodec.stop();
                 buffers1=new LinkedList(buffers);
                 bufferInfos1= new LinkedList(bufferInfos);
               /**  bufferInfos1.peek().presentationTimeUs = 0;
@@ -211,19 +205,32 @@ public class MainActivity extends AppCompatActivity {
                 MediaCodec.BufferInfo buffer = bufferInfos1.remove();
                 bufferInfos1.peek().flags = 1;**/
                 //x=0;
-                try {
-                    while (!bufferInfos1.isEmpty()) {
-                        if(x<2){
-                            mediaMuxer.writeSampleData(videoindex, A[x], B[x]);
-                            x++;
-                        }
-                        else
-                        mediaMuxer.writeSampleData(videoindex, buffers1.poll(), bufferInfos1.poll());
-                    }
-                }catch (Exception e){
-                    warn(e.getMessage());
+                try{
+                    mediaMuxer = new MediaMuxer("/storage/emulated/0/Download/"+ String.valueOf(x) +".mp4",
+                            MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+                }catch (IOException e){
+                    e.printStackTrace();
                 }
+                videoindex = mediaMuxer.addTrack(mediaFormat);
+                mediaMuxer.setOrientationHint(90);
+                mediaMuxer.start();
+
+                    while (!bufferInfos1.isEmpty()) {
+                        if(k<2){
+                           // mediaMuxer.writeSampleData(videoindex, A[x], B[x]);
+                            warn(String.valueOf(videoindex));
+                            k++;
+                        }
+                       // else
+                            try {
+                                //bufferInfos1.remove();
+                                mediaMuxer.writeSampleData(videoindex, buffers1.poll(), bufferInfos1.poll());
+                            }catch (Exception e){
+                            warn(e.getMessage());
+                            }
+                    }
                 mediaMuxer.stop();
+                    mediaCodec.stop();
                 warn("asd");
             }catch (Exception e){
                 Toast.makeText(this,e.toString(),Toast.LENGTH_LONG).show();
@@ -340,7 +347,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void warn(String z) {
         Toast.makeText(this,z,Toast.LENGTH_SHORT).show();
-       // text.setText(z);
+        //text.setText(z);
     }
 
 }
