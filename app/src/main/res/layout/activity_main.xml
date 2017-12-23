@@ -15,22 +15,14 @@
         android:layout_width="match_parent"
         android:layout_height="88.0dp"
         android:id="@+id/button1" />
-    <Button
-        android:text="Record"
-        android:layout_above="@+id/button1"
-        android:layout_width="match_parent"
-        android:layout_height="88.0dp"
-        android:id="@+id/button2" />
 
-    <EditText
-        android:id="@+id/editText"
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_alignParentTop="true"
+        android:layout_alignParentBottom="true"
         android:layout_centerHorizontal="true"
-        android:layout_marginTop="80dp"
-        android:ems="10"
-        android:inputType="textPersonName"
-        android:text="Name" />
+        android:layout_marginBottom="35dp" />
 </RelativeLayout>
 
