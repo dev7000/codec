@@ -17,6 +17,7 @@ import android.media.MediaCodecList;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
@@ -31,8 +32,13 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -41,6 +47,7 @@ import java.util.Queue;
 public class MainActivity extends AppCompatActivity {
     public MediaCodec mediaCodec;
     public MediaMuxer mediaMuxer;
+    public MediaMuxer mediaMuxer1;
     public CameraDevice cameraDevice;
     public CameraCaptureSession captureSession;
     public CaptureRequest.Builder Builder1;
@@ -62,11 +69,13 @@ public class MainActivity extends AppCompatActivity {
     public Queue<MediaCodec.BufferInfo> bufferInfos1;
     public ByteBuffer[] A = new ByteBuffer[2];
     public MediaCodec.BufferInfo[] B = new MediaCodec.BufferInfo[2];
-    public int frames=0;
-    public int x = 3;
+    public int kframes=0,overflow=0,frames=0;
+    public int x = 3,y=0;
     public boolean b = false;
     public MediaFormat mediaFormat;
+    public File direct;
     public int videoindex;
+    public int videoindex1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,6 +101,12 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        direct = new File(Environment.getExternalStorageDirectory() + "/Download/new");
+
+        if(!direct.exists())
+        {
+            direct.mkdir(); //directory is created;
+        }
 
         settexture();
 
@@ -106,7 +121,7 @@ public class MainActivity extends AppCompatActivity {
         format.setInteger(format.KEY_BIT_RATE,  10000000);
         format.setInteger(format.KEY_FRAME_RATE, 30);
         format.setInteger(format.KEY_CAPTURE_RATE, 30);
-        format.setInteger(format.KEY_I_FRAME_INTERVAL, 10);
+        format.setInteger(format.KEY_I_FRAME_INTERVAL, 1);
         try {
             mediaCodec = MediaCodec.createEncoderByType("video/mp4v-es");
         }catch (IOException e){
@@ -121,8 +136,9 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
+                mediaMuxer1.writeSampleData(videoindex1,codec.getOutputBuffer(index),info);
+                if(info.flags==1) addframe();
                 write(codec.getOutputBuffer(index),info);
-               // mediaMuxer.writeSampleData(videoindex,codec.getOutputBuffer(index),info);
                 codec.releaseOutputBuffer(index,false);
             }
 
@@ -134,6 +150,9 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onOutputFormatChanged(@NonNull MediaCodec codec, @NonNull MediaFormat format) {
                mediaFormat = format;
+                videoindex1 = mediaMuxer1.addTrack(format);
+                mediaMuxer1.setOrientationHint(90);
+                mediaMuxer1.start();
             }
         });
 
@@ -144,28 +163,74 @@ public class MainActivity extends AppCompatActivity {
         }
         codecsurface = mediaCodec.createInputSurface();
 
+        try{
+            mediaMuxer1 = new MediaMuxer("/storage/emulated/0/Download/"+ String.valueOf(x) +".mp4",
+                    MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            x++;
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+
         mediaCodec.start();
     }
 
+    private void addframe() {
+        if(bufferInfos.size()>0){
+            kframes++;
+            if(kframes>4){
+                overflow=1;
+                kframes=0;
+            }
+
+            if(overflow>0){
+                bufferInfos.remove();
+                while(bufferInfos.peek().flags!=1){
+                    bufferInfos.remove();
+                }
+                int i=0;
+                while(files(kframes,i).exists()){
+                    files(kframes,i).delete();
+                    i++;
+                }
+                files(kframes,i).delete();
+            }
+            frames=0;
+        }
+    }
+
+    int file =0,start=0,first=0;
     private void write(ByteBuffer b, MediaCodec.BufferInfo info) {
        // warn(String.valueOf(info.presentationTimeUs)+" "+String.valueOf(info.size) +" "+ String.valueOf(info.offset)+
         // " "+String.valueOf(info.flags));
+        //buffers.add(c.getOutputBuffer(i));
+        if(first<1){
 
-        if(frames<150){
-            if (x < 2) {
-                A[x] = b;
-                B[x]= info;
-                x++;
-            }else {
-                buffers.add(b);
-                bufferInfos.add(info);
-                frames++;
+            try {
+                File fs = new File("/storage/emulated/0/Download/new/" + "i" );
+                FileChannel fc = new FileOutputStream(fs, false).getChannel();
+                fc.write(b);
+                fc.close();
+            } catch (FileNotFoundException e) {
+                warn(e.getLocalizedMessage());
+            } catch (IOException e) {
+                warn(e.getLocalizedMessage());
             }
-        }else{
-           // buffers.remove();
-           // bufferInfos.remove();
-            buffers.add(b);
+            B[first]=info;
+            first++;
+        }
+        else {
+
+            try {
+                FileChannel fc = new FileOutputStream(files(kframes,frames), false).getChannel();
+                fc.write(b);
+                fc.close();
+            } catch (FileNotFoundException e) {
+                warn(e.getLocalizedMessage());
+            } catch (IOException x) {
+                warn(x.getLocalizedMessage());
+            }
             bufferInfos.add(info);
+            frames++;
         }
     }
     private void settexture(){
@@ -193,50 +258,85 @@ public class MainActivity extends AppCompatActivity {
     }
 
     int z=0,k=0;
+
     private void click(){
         if(z==0) {
-            try{
-               // mediaCodec.stop();
-                buffers1=new LinkedList(buffers);
-                bufferInfos1= new LinkedList(bufferInfos);
-              /**  bufferInfos1.peek().presentationTimeUs = 0;
-                bufferInfos1.peek().size = 30;
-                bufferInfos1.peek().flags = 2;
-                MediaCodec.BufferInfo buffer = bufferInfos1.remove();
-                bufferInfos1.peek().flags = 1;**/
-                //x=0;
-                try{
-                    mediaMuxer = new MediaMuxer("/storage/emulated/0/Download/"+ String.valueOf(x) +".mp4",
+            int kf=0,f=0;
+            try {
+                mediaCodec.stop();
+                mediaMuxer1.stop();
+                File fs;
+                RandomAccessFile rf;
+                FileChannel fc;
+                if(overflow>0)
+                {
+                    kf= kframes++;
+                    if(kf>4)kf=0;
+                }
+                else
+                    kf=0;
+                try {
+                    mediaMuxer = new MediaMuxer("/storage/emulated/0/Download/" + String.valueOf(x) + ".mp4",
                             MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-                }catch (IOException e){
+                } catch (IOException e) {
                     e.printStackTrace();
                 }
                 videoindex = mediaMuxer.addTrack(mediaFormat);
                 mediaMuxer.setOrientationHint(90);
                 mediaMuxer.start();
-
-                    while (!bufferInfos1.isEmpty()) {
-                        if(k<2){
-                           // mediaMuxer.writeSampleData(videoindex, A[x], B[x]);
-                            warn(String.valueOf(videoindex));
+                    while (!bufferInfos.isEmpty()) {
+                        if (k < 1) {
+                            RandomAccessFile r = new RandomAccessFile("/storage/emulated/0/Download/new/" + "i",
+                                    "rw");
+                            fc = r.getChannel();
+                            ByteBuffer bf = ByteBuffer.allocate((int) fc.size());
+                            fc.read(bf);
+                            mediaMuxer.writeSampleData(videoindex, bf, B[k]);
+                            fc.close();
                             k++;
-                        }
-                       // else
-                            try {
-                                //bufferInfos1.remove();
-                                mediaMuxer.writeSampleData(videoindex, buffers1.poll(), bufferInfos1.poll());
-                            }catch (Exception e){
-                            warn(e.getMessage());
+                        } else {
+                            fs = files(kf,f);
+                            if(!fs.exists()){
+                                fs.delete();
+                                f=0;
+                                kf++;
+                                if(kf>4)kf=0;
+                                fs = files(kf,f);
                             }
+                            rf = new RandomAccessFile(fs,"rw");
+                            fc = rf.getChannel();
+                            ByteBuffer bf;
+                            if(fc.size()<bufferInfos.peek().size)
+                                 bf= ByteBuffer.allocate(bufferInfos.peek().size);
+                            else
+                                bf= ByteBuffer.allocate((int) fc.size());
+                            fc.read(bf);
+                            try {
+                                mediaMuxer.writeSampleData(videoindex, bf, bufferInfos.peek());
+                            }
+                            catch (Exception e) {
+                                Toast.makeText(this,e.toString(),Toast.LENGTH_LONG).show();
+                                warn(String.valueOf(kframes)+" "+String.valueOf(f)+ " "+String.valueOf(kf)+" "
+                                        +String.valueOf(bufferInfos.peek().size) + " "+ String.valueOf(bf.capacity()));
+                                // e.printStackTrace();
+                            }
+                            bufferInfos.remove();
+                            fc.close();
+                            fs.delete();
+                            f++;
+                        }
                     }
+
+                } catch (FileNotFoundException e) {
+                    warn(e.getLocalizedMessage());
+                } catch (IOException x) {
+                    warn(x.getLocalizedMessage());
+                }
+
                 mediaMuxer.stop();
-                    mediaCodec.stop();
                 warn("asd");
-            }catch (Exception e){
-                Toast.makeText(this,e.toString(),Toast.LENGTH_LONG).show();
-            }
-           // z=1;
-        }else {
+
+        } else {
             mediaCodec.stop();
             try{
                 mediaMuxer.stop();
@@ -245,6 +345,14 @@ public class MainActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
             z=0;
+        }
+    }
+
+    private void sleep(long t,int x) {
+        try{
+            Thread.currentThread().sleep(t,x);
+        }catch(InterruptedException e){
+            warn("warn");
         }
     }
 
@@ -347,7 +455,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void warn(String z) {
         Toast.makeText(this,z,Toast.LENGTH_SHORT).show();
-        //text.setText(z);
+       // text.setText(z);
+    }
+
+    private File files(int x, int y){
+        File fs = new File("/storage/emulated/0/Download/new/" + String.valueOf(x) +"_" + String.valueOf(y));
+        return fs;
     }
 
 }
