@@ -137,7 +137,6 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
                 mediaMuxer1.writeSampleData(videoindex1,codec.getOutputBuffer(index),info);
-                if(info.flags==1) addframe();
                 write(codec.getOutputBuffer(index),info);
                 codec.releaseOutputBuffer(index,false);
             }
@@ -261,7 +260,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void click(){
         if(z==0) {
-            int kf=0,f=0;
+            int kf,f=0;
             try {
                 mediaCodec.stop();
                 mediaMuxer1.stop();
@@ -284,6 +283,7 @@ public class MainActivity extends AppCompatActivity {
                 videoindex = mediaMuxer.addTrack(mediaFormat);
                 mediaMuxer.setOrientationHint(90);
                 mediaMuxer.start();
+                try {
                     while (!bufferInfos.isEmpty()) {
                         if (k < 1) {
                             RandomAccessFile r = new RandomAccessFile("/storage/emulated/0/Download/new/" + "i",
@@ -296,31 +296,13 @@ public class MainActivity extends AppCompatActivity {
                             k++;
                         } else {
                             fs = files(kf,f);
-                            if(!fs.exists()){
-                                fs.delete();
-                                f=0;
-                                kf++;
-                                if(kf>4)kf=0;
-                                fs = files(kf,f);
-                            }
                             rf = new RandomAccessFile(fs,"rw");
                             fc = rf.getChannel();
-                            ByteBuffer bf;
-                            if(fc.size()<bufferInfos.peek().size)
-                                 bf= ByteBuffer.allocate(bufferInfos.peek().size);
-                            else
-                                bf= ByteBuffer.allocate((int) fc.size());
+                            ByteBuffer bf = ByteBuffer.allocate((int) fc.size());
                             fc.read(bf);
-                            try {
-                                mediaMuxer.writeSampleData(videoindex, bf, bufferInfos.peek());
-                            }
-                            catch (Exception e) {
-                                Toast.makeText(this,e.toString(),Toast.LENGTH_LONG).show();
-                                warn(String.valueOf(kframes)+" "+String.valueOf(f)+ " "+String.valueOf(kf)+" "
-                                        +String.valueOf(bufferInfos.peek().size) + " "+ String.valueOf(bf.capacity()));
-                                // e.printStackTrace();
-                            }
-                            bufferInfos.remove();
+                            warn(String.valueOf(bf.capacity())+" "+String.valueOf(fc.size())+" "+
+                            String.valueOf(bufferInfos.peek().size));
+                            mediaMuxer.writeSampleData(videoindex, bf, bufferInfos.poll());
                             fc.close();
                             fs.delete();
                             f++;
@@ -335,7 +317,11 @@ public class MainActivity extends AppCompatActivity {
 
                 mediaMuxer.stop();
                 warn("asd");
-
+            } catch (Exception e) {
+                Toast.makeText(this,e.toString(),Toast.LENGTH_LONG).show();
+                //warn(String.valueOf(kframes)+" "+String.valueOf(kf)+" "+String.valueOf(f));
+               // e.printStackTrace();
+            }
         } else {
             mediaCodec.stop();
             try{
