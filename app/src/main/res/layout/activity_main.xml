@@ -1,28 +1,71 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
     <TextureView
         android:id="@+id/surfaceView1"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentStart="true" />
+        android:layout_height="wrap_content"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true" />
+
+
+
     <Button
         android:text="Capture"
         android:layout_alignParentBottom="true"
         android:layout_width="match_parent"
         android:layout_height="88.0dp"
+        android:background="#38a084"
         android:id="@+id/button1" />
 
-    <ProgressBar
-        android:id="@+id/progressBar"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+    <RelativeLayout
+        android:id="@+id/relativeLayout"
+        android:layout_width="match_parent"
+        android:layout_height="88dp"
         android:layout_alignParentBottom="true"
-        android:layout_centerHorizontal="true"
-        android:layout_marginBottom="35dp" />
+        android:background="#ffffff"
+       >
+
+
+        <TextView
+            android:id="@+id/textView1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="7dp"
+            android:layout_marginLeft="7dp"
+            android:textColor="#4f4e4e"
+            android:layout_centerVertical="true"
+            android:layout_alignParentLeft="true"
+            android:text="0:00" />
+
+        <ProgressBar
+            android:id="@+id/progressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_centerVertical="true"
+            android:layout_toEndOf="@+id/textView1"
+            android:layout_toStartOf="@+id/textView"
+            android:progressTint="#38a084"
+            android:progressBackgroundTint="#b0e8d9"
+            android:progress="0" />
+
+        <TextView
+            android:id="@+id/textView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="7dp"
+            android:layout_marginRight="7dp"
+            android:textColor="#4f4e4e"
+            android:layout_centerVertical="true"
+            android:layout_alignParentRight="true"
+            android:text="0:00" />
+
+    </RelativeLayout>
+
+
 </RelativeLayout>
 

@@ -2,6 +2,7 @@ package com.example.nikhilsamrat.myapplication;
 
 import android.app.Application;
 import android.content.Context;
+import android.content.pm.ActivityInfo;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -24,12 +25,15 @@ import android.os.Looper;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Size;
+import android.view.OrientationEventListener;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.webkit.WebView;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
@@ -62,6 +66,8 @@ public class MainActivity extends AppCompatActivity {
     public HandlerThread thread;
     public TextureView T;
     public Button B1;
+    public ProgressBar P;
+    public TextView t1,t2;
     public Queue<ByteBuffer> buffers = new LinkedList<>();
     public Queue<ByteBuffer> buffers1;
     public Queue<MediaCodec.BufferInfo> bufferInfos = new LinkedList<>();
@@ -73,16 +79,22 @@ public class MainActivity extends AppCompatActivity {
     public boolean b = false;
     public MediaFormat mediaFormat;
     public File direct;
+    public timer test;
     public int videoindex;
-    public int videoindex1;
+    public listener Orientation;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         B1 = findViewById(R.id.button1);
         T = findViewById(R.id.surfaceView1);
+        P = findViewById(R.id.progressBar);
+        t1 = findViewById(R.id.textView);
+        t2 = findViewById(R.id.textView1);
+        t1.setText("0:"+String.valueOf(2*time));
 
         B1.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -90,7 +102,7 @@ public class MainActivity extends AppCompatActivity {
                 click();
             }
         });
-
+        B1.setVisibility(View.INVISIBLE);
 
         direct = new File(Environment.getExternalStorageDirectory() + "/Download/new");
 
@@ -100,7 +112,36 @@ public class MainActivity extends AppCompatActivity {
         }
 
         settexture();
+        test = new timer();
+        // test.start();
+        Orientation = new listener(this);
+        Orientation.enable();
+    }
 
+    public class timer extends Thread{
+
+        @Override
+        public void run() {
+
+        }
+
+        public void set(){
+            B1.setVisibility(View.VISIBLE);
+        }
+    }
+
+    public class listener extends OrientationEventListener{
+
+        public int orie=0;
+
+        public listener(Context context) {
+            super(context);
+        }
+
+        @Override
+        public void onOrientationChanged(int orientation) {
+            orie=orientation;
+        }
     }
 
     private void setcodec() {
@@ -127,12 +168,23 @@ public class MainActivity extends AppCompatActivity {
             public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
                 if(info.flags==1) addframe();
                 if(mediaMuxer1!=null){
-                    if(info.flags==1)count++;
-                        mediaMuxer1.writeSampleData(videoindex,codec.getOutputBuffer(index),info);
+                    if(info.flags==1){
+                        if(count>0&&count<=time){
+                            P.setProgress(P.getProgress()+5);
+                            if (P.getProgress() / 5 < 10)
+                                t2.setText("0:0" + String.valueOf(P.getProgress() / 5));
+                            else
+                                t2.setText("0:" + String.valueOf(P.getProgress() / 5));
+                        }
+                        count++;
+                    }
+                    mediaMuxer1.writeSampleData(videoindex,codec.getOutputBuffer(index),info);
                     if(count>time){
                         mediaMuxer1.stop();
                         mediaMuxer1=null;
                         B1.setVisibility(View.VISIBLE);
+                        P.setProgress(50);
+                        t2.setText("0:10");
                         warn("asd");
                         count=0;
                     }
@@ -167,9 +219,18 @@ public class MainActivity extends AppCompatActivity {
         if(bufferInfos.size()>0){
             kframes++;
             if(kframes>time){
-                overflow=1;
+                overflow++;
                 kframes=0;
+            }else if(P.getProgress()<50) {
+                P.setProgress(P.getProgress() + 5);
+                if (P.getProgress() / 5 < 10)
+                    t2.setText("0:0" + String.valueOf(P.getProgress() / 5));
+                else
+                    t2.setText("0:" + String.valueOf(P.getProgress() / 5));
+                if (kframes == time)
+                    B1.setVisibility(View.VISIBLE);
             }
+
 
             if(overflow>0){
                 bufferInfos.remove();
@@ -281,7 +342,16 @@ public class MainActivity extends AppCompatActivity {
                     e.printStackTrace();
                 }
                 videoindex = mediaMuxer.addTrack(mediaFormat);
-                mediaMuxer.setOrientationHint(90);
+                int orientation = Orientation.orie;
+                if(orientation<45 || orientation >=315)
+                    mediaMuxer.setOrientationHint(90);
+                if(orientation>=45 && orientation < 135)
+                    mediaMuxer.setOrientationHint(180);
+                if(orientation>=135 && orientation< 225)
+                    mediaMuxer.setOrientationHint(270);
+                if(orientation>=225 && orientation<315)
+                    mediaMuxer.setOrientationHint(0);
+                warn(String.valueOf(orientation));
                 mediaMuxer.start();
                 try {
                     RandomAccessFile r = new RandomAccessFile("/storage/emulated/0/Download/new/" + "i",
@@ -319,7 +389,6 @@ public class MainActivity extends AppCompatActivity {
                         }
                         bufferInfos1.remove();
                         fc.close();
-                        //fo.close();
                         f++;
 
                 }
@@ -332,37 +401,6 @@ public class MainActivity extends AppCompatActivity {
             mediaMuxer1 = mediaMuxer;
            // mediaMuxer.stop();
             warn("asd");
-    }
-
-    private void copy() {
-        File copy = new File(Environment.getExternalStorageDirectory() + "/Download/new1");
-
-        if(!copy.exists())
-        {
-            copy.mkdir();
-        }
-
-        File y;
-        for(File x : direct.listFiles()){
-            y = new File(copy,x.getName());
-            try{
-                FileChannel fx,fy;
-                FileOutputStream o = new FileOutputStream(y);
-                FileInputStream i = new FileInputStream(x);
-                fx= o.getChannel();
-                fy= i.getChannel();
-                fy.transferTo(0,fy.size(),fx);
-                o.close();
-                i.close();
-                fx.close();
-                fy.close();
-
-            }catch (FileNotFoundException e){
-                e.printStackTrace();
-            }catch (IOException e){
-                e.printStackTrace();
-            }
-        }
     }
 
 
@@ -399,7 +437,6 @@ public class MainActivity extends AppCompatActivity {
             StreamConfigurationMap map = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             imagedimension = map.getOutputSizes(256)[1];
             setcodec();
-            //warn();
             openCamera();
         }catch (CameraAccessException e){
             e.printStackTrace();
@@ -434,9 +471,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void createPreview() {
         SurfaceTexture surfaceTexture = T.getSurfaceTexture();
-        surfaceTexture.setDefaultBufferSize(T.getHeight(),T.getWidth());
+        surfaceTexture.setDefaultBufferSize(imagedimension.getWidth(),imagedimension.getHeight());
         Surface surface = new Surface(surfaceTexture);
-        surfaces = new LinkedList<Surface>();
+        surfaces = new LinkedList<>();
         surfaces.add(surface);
         surfaces.add(codecsurface);
         try{
