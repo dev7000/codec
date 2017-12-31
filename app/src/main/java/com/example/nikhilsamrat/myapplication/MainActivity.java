@@ -2,6 +2,7 @@ package com.example.nikhilsamrat.myapplication;
 
 import android.app.Application;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
@@ -11,6 +12,10 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.location.Criteria;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.media.CamcorderProfile;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
@@ -22,6 +27,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Size;
@@ -36,11 +42,16 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -64,24 +75,27 @@ public class MainActivity extends AppCompatActivity {
     public Surface codecsurface;
     public Handler handler;
     public HandlerThread thread;
+    public MediaFormat metadata;
     public TextureView T;
     public Button B1;
     public ProgressBar P;
     public TextView t1,t2;
-    public Queue<ByteBuffer> buffers = new LinkedList<>();
-    public Queue<ByteBuffer> buffers1;
+    public MediaCodec.BufferInfo bufinfo;
     public Queue<MediaCodec.BufferInfo> bufferInfos = new LinkedList<>();
     public Queue<MediaCodec.BufferInfo> bufferInfos1;
-    public ByteBuffer[] A = new ByteBuffer[2];
+    public ByteBuffer A;
     public MediaCodec.BufferInfo[] B = new MediaCodec.BufferInfo[2];
     public int kframes=0,overflow=0,frames=0;
     public int x =0,y=0,time=10,count=0;
     public boolean b = false;
     public MediaFormat mediaFormat;
-    public File direct;
-    public timer test;
-    public int videoindex;
+    public File direct,direct1,direct2;
+    public int videoindex,text;
+    public String subs;
     public listener Orientation;
+    public Location location;
+    public boolean cameraoff = false,offstatus=true;
+    public LocationManager locationManager;
 
 
     @Override
@@ -104,30 +118,39 @@ public class MainActivity extends AppCompatActivity {
         });
         B1.setVisibility(View.INVISIBLE);
 
-        direct = new File(Environment.getExternalStorageDirectory() + "/Download/new");
+        direct = new File(Environment.getExternalStorageDirectory() + "/VideoRecorder");
+        direct1 = new File(direct,".temp");
+        direct2 = new File(direct,"Recordings");
 
-        if(!direct.exists())
-        {
-            direct.mkdir(); //directory is created;
+        if(!direct.exists()) {
+            direct.mkdir();
+            direct1.mkdir();
+            direct2.mkdir();//directory is created;
+        }else if(!direct1.exists()){
+           direct1.mkdir();
+        }else if(!direct2.exists()){
+            direct2.mkdir();
+        }else{
+            x=direct2.list().length;
         }
-
+        offstatus=false;
         settexture();
-        test = new timer();
-        // test.start();
+
         Orientation = new listener(this);
         Orientation.enable();
+
+        bufinfo = new MediaCodec.BufferInfo();
+        bufinfo.flags=0;
+        bufinfo.offset=0;
+        subs = "hi";
+        A=ByteBuffer.wrap(subs.getBytes());
+        bufinfo.size=A.capacity();
+
     }
 
-    public class timer extends Thread{
-
-        @Override
-        public void run() {
-
-        }
-
-        public void set(){
-            B1.setVisibility(View.VISIBLE);
-        }
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
     }
 
     public class listener extends OrientationEventListener{
@@ -145,8 +168,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setcodec() {
-
-        MediaFormat format = MediaFormat.createVideoFormat("video/mp4v-es", 640, 480);
+        MediaFormat format = MediaFormat.createVideoFormat("video/mp4v-es", 1920 ,1080);
         format.setInteger(format.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
         format.setInteger(format.KEY_BIT_RATE,  10000000);
         format.setInteger(format.KEY_FRAME_RATE, 30);
@@ -169,7 +191,7 @@ public class MainActivity extends AppCompatActivity {
                 if(info.flags==1) addframe();
                 if(mediaMuxer1!=null){
                     if(info.flags==1){
-                        if(count>0&&count<=time){
+                        if(count<time){
                             P.setProgress(P.getProgress()+5);
                             if (P.getProgress() / 5 < 10)
                                 t2.setText("0:0" + String.valueOf(P.getProgress() / 5));
@@ -178,14 +200,21 @@ public class MainActivity extends AppCompatActivity {
                         }
                         count++;
                     }
+                    //bufinfo=info;
+                    //bufinfo.size=A.capacity();
                     mediaMuxer1.writeSampleData(videoindex,codec.getOutputBuffer(index),info);
-                    if(count>time){
+                    try{
+                       // mediaMuxer1.writeSampleData(text,A,bufinfo);
+                    }catch (Exception e){
+                        warn(e.toString());
+                    }
+                    if(count==time){
                         mediaMuxer1.stop();
                         mediaMuxer1=null;
                         B1.setVisibility(View.VISIBLE);
                         P.setProgress(50);
                         t2.setText("0:10");
-                        warn("asd");
+                       // warn("asd");
                         count=0;
                     }
 
@@ -268,14 +297,14 @@ public class MainActivity extends AppCompatActivity {
         if(first<1){
 
             try {
-                File fs = new File("/storage/emulated/0/Download/new/" + "i" );
+                File fs = new File(direct1,"i" );
                 FileChannel fc = new FileOutputStream(fs, false).getChannel();
                 fc.write(b);
                 fc.close();
             } catch (FileNotFoundException e) {
-                warn(e.getLocalizedMessage());
+               // warn(e.getLocalizedMessage());
             } catch (IOException e) {
-                warn(e.getLocalizedMessage());
+                //warn(e.getLocalizedMessage());
             }
             B[first]=info;
             first++;
@@ -287,9 +316,9 @@ public class MainActivity extends AppCompatActivity {
                 fc.write(b);
                 fc.close();
             } catch (FileNotFoundException e) {
-                warn(e.getLocalizedMessage());
+                //warn(e.getLocalizedMessage());
             } catch (IOException x) {
-                warn(x.getLocalizedMessage());
+                //warn(x.getLocalizedMessage());
             }
             bufferInfos.add(info);
             frames++;
@@ -336,12 +365,43 @@ public class MainActivity extends AppCompatActivity {
                 }
                 else kf=0;
                 try {
-                    mediaMuxer = new MediaMuxer("/storage/emulated/0/Download/" + String.valueOf(x) + ".mp4",
+                    mediaMuxer = new MediaMuxer(direct2.getPath()+"/"+String.valueOf(x)+".mp4",
                             MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+
+                //metadata = MediaFormat.createSubtitleFormat(MediaFormat.MIMETYPE_TEXT_VTT,"en");
                 videoindex = mediaMuxer.addTrack(mediaFormat);
+
+                byte[] bytes = null;
+                ByteArrayOutputStream bos = null;
+                ObjectOutputStream oos = null;
+                try {
+                    bos = new ByteArrayOutputStream();
+                    oos = new ObjectOutputStream(bos);
+                  //  oos.writeObject(mediaFormat);
+                  //  oos.flush();
+                  //  bytes = bos.toByteArray();
+                } finally {
+                    if (oos != null) {
+                        oos.close();
+                    }
+                    if (bos != null) {
+                        bos.close();
+                    }
+                }
+                ByteArrayInputStream bis = null;
+                ObjectInputStream ois = null;
+                try {
+                   // bis = new ByteArrayInputStream(bytes);
+                    //ois = new ObjectInputStream(bis);
+                    //metadata =(MediaFormat) ois.readObject();
+                    bis.close();
+                    ois.close();
+                }catch (Exception e){
+
+                }
                 int orientation = Orientation.orie;
                 if(orientation<45 || orientation >=315)
                     mediaMuxer.setOrientationHint(90);
@@ -351,15 +411,22 @@ public class MainActivity extends AppCompatActivity {
                     mediaMuxer.setOrientationHint(270);
                 if(orientation>=225 && orientation<315)
                     mediaMuxer.setOrientationHint(0);
-                warn(String.valueOf(orientation));
+               // warn(String.valueOf(orientation));
                 mediaMuxer.start();
                 try {
-                    RandomAccessFile r = new RandomAccessFile("/storage/emulated/0/Download/new/" + "i",
+                    RandomAccessFile r = new RandomAccessFile(direct1.getPath()+"/i",
                             "rw");
                     fc = r.getChannel();
                     ByteBuffer bf = ByteBuffer.allocate((int) fc.size());
                     fc.read(bf);
+                    //bufinfo=B[0];
+                   // bufinfo.size=A.capacity();
                     mediaMuxer.writeSampleData(videoindex, bf, B[0]);
+                    try {
+                       // mediaMuxer.writeSampleData(text, A, bufinfo);
+                    }catch (Exception e){
+                        warn(e.toString());
+                    }
                     fc.close();
                 }catch (FileNotFoundException e) {
                 }
@@ -382,7 +449,14 @@ public class MainActivity extends AppCompatActivity {
                         fc.read(bf);
 
                         try {
+                            //bufinfo=bufferInfos1.peek();
+                            //bufinfo.size=A.capacity();
                             mediaMuxer.writeSampleData(videoindex, bf, bufferInfos1.peek());
+                            try {
+                               // mediaMuxer.writeSampleData(text, A, bufinfo);
+                            }catch (Exception e){
+                                warn(e.toString());
+                            }
                         }
                         catch (Exception e) {
                              e.printStackTrace();
@@ -394,20 +468,20 @@ public class MainActivity extends AppCompatActivity {
                 }
 
             } catch (FileNotFoundException e) {
-                warn(e.getLocalizedMessage());
+               // warn(e.getLocalizedMessage());
             } catch (IOException x) {
-                warn(x.getLocalizedMessage());
+               // warn(x.getLocalizedMessage());
             }
             mediaMuxer1 = mediaMuxer;
            // mediaMuxer.stop();
-            warn("asd");
+            //warn("asd");
     }
 
 
     @Override
     protected void onPause() {
         super.onPause();
-        thread.quitSafely();
+    /**    thread.quitSafely();
         try{
             thread.join();
             thread =null;
@@ -415,17 +489,63 @@ public class MainActivity extends AppCompatActivity {
         }catch (InterruptedException e){
             e.printStackTrace();
         }
-        cameraDevice.close();
+        cameraDevice.close();**/
     }
 
     @Override
     protected void onPostResume() {
         super.onPostResume();
-        if(T.isAvailable())
+       if(cameraoff){
+        restart();
+       }
+       if(!offstatus){
+
+           if(!direct.exists()) {
+               restart();//directory is created;
+           }else if(!direct1.exists()){
+               restart();
+           }else if(!direct2.exists()){
+               direct2.mkdir();x=0;
+           }
+       }
+
+        locationManager = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
+
+
+        locationManager.requestSingleUpdate(LocationManager.GPS_PROVIDER, new LocationListener() {
+            @Override
+            public void onLocationChanged(Location loc) {
+                location = loc;
+            }
+
+            @Override
+            public void onStatusChanged(String provider, int status, Bundle extras) {
+
+            }
+
+            @Override
+            public void onProviderEnabled(String provider) {
+
+            }
+
+            @Override
+            public void onProviderDisabled(String provider) {
+                Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+                startActivity(intent);
+            }
+        },null);
+
+      /**  if(T.isAvailable())
             openCamera();
         thread = new HandlerThread("Camera Background");
         thread.start();
-        handler = new Handler(thread.getLooper());
+        handler = new Handler(thread.getLooper());**/
+    }
+
+    public void restart(){
+        Intent i = new Intent(this, MainActivity.class);
+        i.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(i);
     }
 
     private void openmanager() {
@@ -441,7 +561,6 @@ public class MainActivity extends AppCompatActivity {
         }catch (CameraAccessException e){
             e.printStackTrace();
         }
-
     }
 
     private void openCamera(){
@@ -455,6 +574,7 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void onDisconnected(@NonNull CameraDevice camera) {
+                    cameraoff = true;
                     camera.close();
                 }
 
@@ -505,7 +625,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private File files(int x, int y){
-        File fs = new File("/storage/emulated/0/Download/new/" + String.valueOf(x) +"_" + String.valueOf(y));
+        File fs = new File(direct1.getPath()+"/" + String.valueOf(x) +"_" + String.valueOf(y));
         return fs;
     }
 
