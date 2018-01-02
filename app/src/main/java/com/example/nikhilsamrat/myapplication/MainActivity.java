@@ -5,6 +5,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.SurfaceTexture;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -55,6 +59,8 @@ import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -83,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
     public MediaCodec.BufferInfo bufinfo;
     public Queue<MediaCodec.BufferInfo> bufferInfos = new LinkedList<>();
     public Queue<MediaCodec.BufferInfo> bufferInfos1;
+    public Queue qx,qy,qz,Qx,Qy,Qz;
     public ByteBuffer A;
     public MediaCodec.BufferInfo[] B = new MediaCodec.BufferInfo[2];
     public int kframes=0,overflow=0,frames=0;
@@ -96,6 +103,9 @@ public class MainActivity extends AppCompatActivity {
     public Location location;
     public boolean cameraoff = false,offstatus=true;
     public LocationManager locationManager;
+    public SensorManager mSensorManager;
+    public Sensor mSensor;
+    public float ax,ay,az;
 
 
     @Override
@@ -142,9 +152,10 @@ public class MainActivity extends AppCompatActivity {
         bufinfo = new MediaCodec.BufferInfo();
         bufinfo.flags=0;
         bufinfo.offset=0;
-        subs = "hi";
-        A=ByteBuffer.wrap(subs.getBytes());
-        bufinfo.size=A.capacity();
+
+        qx = new LinkedList();
+        qy = new LinkedList();
+        qz = new LinkedList();
 
     }
 
@@ -189,6 +200,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
                 if(info.flags==1) addframe();
+                qx.add(ax);qy.add(ay);qz.add(az);
                 if(mediaMuxer1!=null){
                     if(info.flags==1){
                         if(count<time){
@@ -200,14 +212,17 @@ public class MainActivity extends AppCompatActivity {
                         }
                         count++;
                     }
-                    //bufinfo=info;
-                    //bufinfo.size=A.capacity();
                     mediaMuxer1.writeSampleData(videoindex,codec.getOutputBuffer(index),info);
-                    try{
-                       // mediaMuxer1.writeSampleData(text,A,bufinfo);
-                    }catch (Exception e){
-                        warn(e.toString());
-                    }
+                    A = ByteBuffer.allocate(28+subs.getBytes().length);
+                    A.putDouble(location.getLongitude());
+                    A.putDouble(location.getLatitude());
+                    A.putFloat((float)qx.peek());
+                    A.putFloat((float)qy.peek());
+                    A.putFloat((float)qz.peek());
+                    A.put(subs.getBytes());
+                    bufinfo.size=A.capacity();
+                    bufinfo.presentationTimeUs=info.presentationTimeUs;
+                    mediaMuxer1.writeSampleData(text,A,bufinfo);
                     if(count==time){
                         mediaMuxer1.stop();
                         mediaMuxer1=null;
@@ -263,8 +278,10 @@ public class MainActivity extends AppCompatActivity {
 
             if(overflow>0){
                 bufferInfos.remove();
+                qx.remove();qy.remove();qz.remove();
                 while(bufferInfos.peek().flags!=1){
                     bufferInfos.remove();
+                    qx.remove();qy.remove();qz.remove();
                 }
                 int i=0;
                 while(files(kframes,i).exists()){
@@ -301,6 +318,7 @@ public class MainActivity extends AppCompatActivity {
                 FileChannel fc = new FileOutputStream(fs, false).getChannel();
                 fc.write(b);
                 fc.close();
+                qx.remove();qy.remove();qz.remove();
             } catch (FileNotFoundException e) {
                // warn(e.getLocalizedMessage());
             } catch (IOException e) {
@@ -370,38 +388,12 @@ public class MainActivity extends AppCompatActivity {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-
-                //metadata = MediaFormat.createSubtitleFormat(MediaFormat.MIMETYPE_TEXT_VTT,"en");
+                Date currentTime = Calendar.getInstance().getTime();
+                metadata = new MediaFormat();
+                metadata.setString(MediaFormat.KEY_MIME,"application/meta");
+                text = mediaMuxer.addTrack(metadata);
                 videoindex = mediaMuxer.addTrack(mediaFormat);
 
-                byte[] bytes = null;
-                ByteArrayOutputStream bos = null;
-                ObjectOutputStream oos = null;
-                try {
-                    bos = new ByteArrayOutputStream();
-                    oos = new ObjectOutputStream(bos);
-                  //  oos.writeObject(mediaFormat);
-                  //  oos.flush();
-                  //  bytes = bos.toByteArray();
-                } finally {
-                    if (oos != null) {
-                        oos.close();
-                    }
-                    if (bos != null) {
-                        bos.close();
-                    }
-                }
-                ByteArrayInputStream bis = null;
-                ObjectInputStream ois = null;
-                try {
-                   // bis = new ByteArrayInputStream(bytes);
-                    //ois = new ObjectInputStream(bis);
-                    //metadata =(MediaFormat) ois.readObject();
-                    bis.close();
-                    ois.close();
-                }catch (Exception e){
-
-                }
                 int orientation = Orientation.orie;
                 if(orientation<45 || orientation >=315)
                     mediaMuxer.setOrientationHint(90);
@@ -411,27 +403,26 @@ public class MainActivity extends AppCompatActivity {
                     mediaMuxer.setOrientationHint(270);
                 if(orientation>=225 && orientation<315)
                     mediaMuxer.setOrientationHint(0);
-               // warn(String.valueOf(orientation));
+
                 mediaMuxer.start();
+
                 try {
                     RandomAccessFile r = new RandomAccessFile(direct1.getPath()+"/i",
                             "rw");
                     fc = r.getChannel();
                     ByteBuffer bf = ByteBuffer.allocate((int) fc.size());
                     fc.read(bf);
-                    //bufinfo=B[0];
-                   // bufinfo.size=A.capacity();
+                    subs = currentTime.toString();
                     mediaMuxer.writeSampleData(videoindex, bf, B[0]);
-                    try {
-                       // mediaMuxer.writeSampleData(text, A, bufinfo);
-                    }catch (Exception e){
-                        warn(e.toString());
-                    }
                     fc.close();
                 }catch (FileNotFoundException e) {
                 }
 
                 bufferInfos1 = new LinkedList(bufferInfos);
+
+                Qx = new LinkedList(qx);
+                Qy = new LinkedList(qy);
+                Qz = new LinkedList(qz);
 
                 x++;
                 while (!bufferInfos1.isEmpty()) {
@@ -449,14 +440,17 @@ public class MainActivity extends AppCompatActivity {
                         fc.read(bf);
 
                         try {
-                            //bufinfo=bufferInfos1.peek();
-                            //bufinfo.size=A.capacity();
+                            A = ByteBuffer.allocate(28+subs.getBytes().length);
+                            A.putDouble(location.getLongitude());
+                            A.putDouble(location.getLatitude());
+                            A.putFloat((float)Qx.poll());
+                            A.putFloat((float)Qy.poll());
+                            A.putFloat((float)Qz.poll());
+                            A.put(subs.getBytes());
+                            bufinfo.presentationTimeUs=bufferInfos1.peek().presentationTimeUs;
+                            bufinfo.size=A.capacity();
                             mediaMuxer.writeSampleData(videoindex, bf, bufferInfos1.peek());
-                            try {
-                               // mediaMuxer.writeSampleData(text, A, bufinfo);
-                            }catch (Exception e){
-                                warn(e.toString());
-                            }
+                            mediaMuxer.writeSampleData(text,A,bufinfo);
                         }
                         catch (Exception e) {
                              e.printStackTrace();
@@ -509,10 +503,12 @@ public class MainActivity extends AppCompatActivity {
            }
        }
 
+        x=direct2.list().length;
+
         locationManager = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
 
 
-        locationManager.requestSingleUpdate(LocationManager.GPS_PROVIDER, new LocationListener() {
+        locationManager.requestSingleUpdate(LocationManager.NETWORK_PROVIDER, new LocationListener() {
             @Override
             public void onLocationChanged(Location loc) {
                 location = loc;
@@ -530,11 +526,26 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onProviderDisabled(String provider) {
-                Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+                 Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
                 startActivity(intent);
             }
         },null);
 
+        mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        mSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+        mSensorManager.registerListener(new SensorEventListener() {
+            @Override
+            public void onSensorChanged(SensorEvent event) {
+                ax=event.values[0];
+                ay=event.values[1];
+                az=event.values[2];
+            }
+
+            @Override
+            public void onAccuracyChanged(Sensor sensor, int accuracy) {
+
+            }
+        }, mSensor, SensorManager.SENSOR_DELAY_NORMAL);
       /**  if(T.isAvailable())
             openCamera();
         thread = new HandlerThread("Camera Background");
